@@ -33,14 +33,6 @@ sudo bash install.sh
 
 默认管理员账号：`admin` / `admin123`
 
-## 升级
-
-重复执行安装脚本即可升级。已有 `config.yaml` 和 `data/` 目录会自动保留。
-
-```bash
-sudo bash install.sh
-```
-
 ## 目录结构
 
 部署后的目录布局：
