@@ -8,7 +8,7 @@ wilson-blog 是一个轻量级博客系统，基于 Go + Gin 后端和 Vue 3 前
 
 - 单二进制部署：前端产物内嵌，无需 Nginx
 - SQLite WAL 模式：零外部依赖，2G 内存即可运行
-- 一键安装 / 升级：`install.sh` 自动下载、校验、配置 systemd
+- 一键安装：`install.sh` 自动下载、校验、配置 systemd
 - 首次安装自动生成 JWT 密钥，升级时保留已有配置和数据
 
 ## 快速安装
