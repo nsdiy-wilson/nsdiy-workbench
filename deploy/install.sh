@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# wilson-blog 一键安装 / 升级脚本
+# wilson-blog 首次安装脚本（重复执行会自动拒绝，升级请手动替换二进制）
 # 用法: sudo bash install.sh
 set -euo pipefail
 
@@ -13,6 +13,11 @@ error() { echo "[ERROR] $*" >&2; exit 1; }
 
 [[ $EUID -eq 0 ]] || error "请使用 root 或 sudo 执行"
 command -v wget &>/dev/null || error "缺少 wget"
+
+# 检测是否已安装，禁止重复执行
+if [[ -f "$DIR/wilson-blog" ]] || systemctl list-unit-files --quiet "$SVC.service" 2>/dev/null; then
+    error "检测到已安装 wilson-blog，本脚本仅用于首次安装。升级请手动下载新版本压缩包并替换二进制。"
+fi
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
@@ -36,12 +41,9 @@ EXPECT=$(grep -m1 'linux-amd64.*\.tar\.gz' "$TMP/checksums.txt" | awk '{print $1
 [[ "$EXPECT" == "$(sha256sum "$TMP/pkg.tar.gz" | awk '{print $1}')" ]] || error "SHA256 校验失败"
 info "校验通过"
 
-# 停服并解压（已有 config.yaml 原样保留）
-systemctl is-active --quiet "$SVC" 2>/dev/null && systemctl stop "$SVC"
+# 解压
 mkdir -p "$DIR"
-[[ -f "$CFG" ]] && cp "$CFG" "$TMP/config.bak"
 tar -xzf "$TMP/pkg.tar.gz" -C "$DIR"
-[[ -f "$TMP/config.bak" ]] && mv -f "$TMP/config.bak" "$CFG"
 chmod +x "$DIR/wilson-blog"
 
 # 首次安装生成 JWT 密钥
