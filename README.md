@@ -1,122 +1,87 @@
 # nsdiy-workbench
 
-**wilson-blog** 的 GitHub 发布仓库。源码维护在 [Gitee](https://gitee.com/zhouws-chn/wilson-blog)，本仓库仅用于版本发布和一键部署。
+Go + Gin 后端 + Vue 3 前端的博客系统，打包为单个二进制文件部署。
 
-wilson-blog 是一个轻量级博客系统，基于 Go + Gin 后端和 Vue 3 前端，打包为单个二进制文件部署，内置 SQLite（WAL 模式），无需额外数据库服务。
+## 快速开始
 
-## 特性
-
-- 单二进制部署：前端产物内嵌，无需 Nginx
-- SQLite WAL 模式：零外部依赖，2G 内存即可运行
-- 一键安装：`install.sh` 自动下载、校验、配置 systemd
-- 首次安装自动生成 JWT 密钥，升级时保留已有配置和数据
-
-## 快速安装
-
-需要 Linux amd64 服务器，root 权限。
+### 本地开发
 
 ```bash
-wget -O install.sh https://raw.githubusercontent.com/nsdiy-wilson/nsdiy-workbench/master/deploy/install.sh
-sudo bash install.sh
+# 启动后端（监听 :8888，自动建表+种子用户）
+cd server
+go run .
+
+# 启动读者前台（另一个终端，监听 :5173）
+cd web
+npm install
+npm run dev
+
+# 启动管理后台（另一个终端，监听 :5174）
+cd admin
+npm install
+npm run dev
 ```
 
-脚本自动完成：
+默认管理员：`admin` / `admin123`
 
-1. 查询 GitHub 最新 Release
-2. 下载压缩包
-3. SHA256 校验
-4. 解压到 `/opt/wilson-blog/`
-5. 首次安装生成 JWT 签名密钥
-6. 安装并启动 systemd 服务
+## 打包部署
 
-安装完成后访问 `http://<服务器IP>:8888`。
-
-默认管理员账号：`admin` / `admin123`
-
-## 目录结构
-
-部署后的目录布局：
-
-```
-/opt/wilson-blog/
-├── wilson-blog          # 可执行文件
-├── config.yaml          # 运行配置
-├── wilson-blog.service  # systemd 服务文件
-└── data/                # 需要备份的数据目录
-    ├── wilson.db         # SQLite 数据库（WAL 模式）
-    └── uploads/          # 用户上传文件
-```
-
-## 配置说明
-
-编辑 `/opt/wilson-blog/config.yaml`：
-
-| 配置项 | 说明 | 默认值 |
-|--------|------|--------|
-| `server.addr` | 监听地址 | `:8888` |
-| `server.data-path` | 数据目录 | `./data` |
-| `jwt.signing-key` | JWT 签名密钥（首次安装自动生成） | — |
-| `jwt.expires-time` | Token 有效期 | `168h`（7天） |
-| `upload.max-file-size` | 上传文件大小限制 | `10485760`（10MB） |
-| `cors.allowed-origins` | 允许的跨域来源 | `[]` |
-| `log.level` | 日志级别 | `info` |
-
-修改配置后重启服务生效：
+### 方式一：一键打包（推荐）
 
 ```bash
-systemctl restart wilson-blog
+# Linux/macOS
+./deploy/local_package.sh
+
+# Windows
+.\deploy\local_package.ps1
 ```
 
-## 常用命令
+产物：`deploy/output/nsdiy-workbench-linux-amd64-<版本>_build<日期>.tar.gz`（另有 `checksums.txt`、`version.json`），包含 Linux amd64 二进制 + `config.yaml` + systemd 单元文件。
+
+> 打包脚本只编译 Go 二进制，**不构建前端**。前端有改动时，必须先执行下方「方式二」的前两步把产物拷进 `server/packfile/`，否则二进制里内嵌的仍是旧前端。
+
+### 方式二：手动构建
+
+前端产物需要更新时执行（也可单独执行，再回到方式一打包）：
 
 ```bash
-# 查看状态
-systemctl status wilson-blog
+# 1. 构建前端
+cd web && npm run build && cd ..
+cd admin && npm run build && cd ..
 
-# 重启服务
-systemctl restart wilson-blog
+# 2. 拷贝产物
+rm -rf server/packfile/web_dist server/packfile/admin_dist
+cp -r web/dist server/packfile/web_dist
+cp -r admin/dist server/packfile/admin_dist
 
-# 查看实时日志
-journalctl -u wilson-blog -f
-
-# 查看最近日志
-journalctl -u wilson-blog -n 100
+# 3. 编译二进制（内嵌前端）
+cd server
+go build -trimpath -ldflags="-s -w" -o nsdiy-workbench .
 ```
 
-## 备份与恢复
+### 部署
 
-`data/` 目录包含所有业务数据，定期备份即可：
+1. 上传二进制到服务器
+2. 放置 `config.yaml`（修改 `jwt.signing-key` 和 `server.data-path`）
+3. 运行：`./nsdiy-workbench`
+
+详细部署说明见 [deploy/README.md](deploy/README.md)
+
+### 发布到 GitHub Release
 
 ```bash
-# 备份
-tar -czf backup-$(date +%Y%m%d).tar.gz /opt/wilson-blog/data
+# 1. 修改版本号（仅需在发布前修改一次）
+# 编辑 server/version/base_version.go 中的 AppVersion
+# 例如：const AppVersion = "v1.0.0"
 
-# 恢复：将备份解压回 data/ 目录，重启服务
-systemctl restart wilson-blog
+# 2. 打包（编译 Linux 二进制 + config.yaml + service，输出到 deploy/output/）
+# Windows: .\deploy\local_package.ps1
+.\deploy\local_package.ps1
+
+# 3. 手动上传到 GitHub Release
+# - 访问 https://github.com/zhouws-chn/nsdiy-workbench/releases/new
+# - 选择/创建 tag（如 v1.0.0）
+# - 填写 Release title 和描述
+# - 上传 deploy/output/ 下的 .tar.gz，以及 checksums.txt（安装脚本强依赖，必须一起传）
+# - 发布
 ```
-
-## 资源占用
-
-- 常驻内存：约 30–60MB
-- 磁盘：二进制约 20MB，数据随使用增长
-- 适用配置：2 核 2G 即可稳定运行
-
-## 版本发布说明
-
-### v1.0.0
-
-首个正式版本。
-
-- Go + Gin 后端 + Vue 3 前端，单二进制部署
-- SQLite WAL 模式，内置博客核心功能
-- 管理后台 + 读者前台
-- 一键安装脚本，systemd 服务管理
-- 上传图片限制与 CORS 配置
-
-## 源码
-
-源码仓库：https://gitee.com/zhouws-chn/wilson-blog
-
-## License
-
-See [Gitee repository](https://gitee.com/zhouws-chn/wilson-blog) for license information.
