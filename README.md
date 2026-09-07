@@ -24,64 +24,65 @@ npm run dev
 
 默认管理员：`admin` / `admin123`
 
-## 打包部署
+## 部署
 
-### 方式一：一键打包（推荐）
+### 方式一：一键安装（推荐）
 
 ```bash
-# Linux/macOS
-./deploy/local_package.sh
+# wget
+wget -qO- https://raw.githubusercontent.com/nsdiy-wilson/nsdiy-workbench/main/deploy/install.sh | sudo bash
 
-# Windows
-.\deploy\local_package.ps1
+# curl
+curl -fsSL https://raw.githubusercontent.com/nsdiy-wilson/nsdiy-workbench/main/deploy/install.sh | sudo bash
 ```
 
-产物：`deploy/output/nsdiy-workbench-linux-amd64-<版本>_build<日期>.tar.gz`（另有 `checksums.txt`、`version.json`），包含 Linux amd64 二进制 + `config.yaml` + systemd 单元文件。
+脚本会自动从 GitHub Release 下载最新版本，校验 SHA256，安装到 `/opt/nsdiy-workbench`，并启动 systemd 服务。
 
-> 打包脚本只编译 Go 二进制，**不构建前端**。前端有改动时，必须先执行下方「方式二」的前两步把产物拷进 `server/packfile/`，否则二进制里内嵌的仍是旧前端。
+### 方式二：手动部署
 
-### 方式二：手动构建
+1. 从 [GitHub Releases](https://github.com/nsdiy-wilson/nsdiy-workbench/releases) 下载最新 `linux-amd64` 压缩包
+2. 解压到目标目录：
+   ```bash
+   mkdir -p /opt/nsdiy-workbench
+   tar -xzf nsdiy-workbench-linux-amd64-*.tar.gz -C /opt/nsdiy-workbench
+   ```
+3. 编辑 `config.yaml`，修改以下配置：
+   - `jwt.signing-key`：替换为随机密钥（首次安装会自动生成）
+   - `server.data-path`：数据存储路径（如 `/opt/nsdiy-workbench/data`）
+4. 启动服务：
+   ```bash
+   /opt/nsdiy-workbench/nsdiy-workbench
+   ```
 
-前端产物需要更新时执行（也可单独执行，再回到方式一打包）：
+### 方式三：使用 systemd 管理
+
+```bash
+# 复制服务文件
+sudo cp /opt/nsdiy-workbench/nsdiy-workbench.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now nsdiy-workbench
+
+# 查看状态
+sudo systemctl status nsdiy-workbench
+sudo journalctl -u nsdiy-workbench -f
+```
+
+## 开发者：打包发布
 
 ```bash
 # 1. 构建前端
 cd web && npm run build && cd ..
 cd admin && npm run build && cd ..
 
-# 2. 拷贝产物
+# 2. 拷贝前端产物
 rm -rf server/packfile/web_dist server/packfile/admin_dist
 cp -r web/dist server/packfile/web_dist
 cp -r admin/dist server/packfile/admin_dist
 
-# 3. 编译二进制（内嵌前端）
-cd server
-go build -trimpath -ldflags="-s -w" -o nsdiy-workbench .
-```
+# 3. 打包（Linux 二进制 + config.yaml + service）
+./deploy/local_package.ps1
 
-### 部署
-
-1. 上传二进制到服务器
-2. 放置 `config.yaml`（修改 `jwt.signing-key` 和 `server.data-path`）
-3. 运行：`./nsdiy-workbench`
-
-详细部署说明见 [deploy/README.md](deploy/README.md)
-
-### 发布到 GitHub Release
-
-```bash
-# 1. 修改版本号（仅需在发布前修改一次）
-# 编辑 server/version/base_version.go 中的 AppVersion
-# 例如：const AppVersion = "v1.0.0"
-
-# 2. 打包（编译 Linux 二进制 + config.yaml + service，输出到 deploy/output/）
-# Windows: .\deploy\local_package.ps1
-.\deploy\local_package.ps1
-
-# 3. 手动上传到 GitHub Release
-# - 访问 https://github.com/zhouws-chn/nsdiy-workbench/releases/new
-# - 选择/创建 tag（如 v1.0.0）
-# - 填写 Release title 和描述
-# - 上传 deploy/output/ 下的 .tar.gz，以及 checksums.txt（安装脚本强依赖，必须一起传）
-# - 发布
+# 4. 发布到 GitHub Release
+# - 修改 server/version/base_version.go 中的 AppVersion
+# - 上传 deploy/output/ 下的 .tar.gz 和 checksums.txt
 ```
