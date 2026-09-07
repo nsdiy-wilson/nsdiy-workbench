@@ -2,28 +2,6 @@
 
 Go + Gin 后端 + Vue 3 前端的博客系统，打包为单个二进制文件部署。
 
-## 快速开始
-
-### 本地开发
-
-```bash
-# 启动后端（监听 :8888，自动建表+种子用户）
-cd server
-go run .
-
-# 启动读者前台（另一个终端，监听 :5173）
-cd web
-npm install
-npm run dev
-
-# 启动管理后台（另一个终端，监听 :5174）
-cd admin
-npm install
-npm run dev
-```
-
-默认管理员：`admin` / `admin123`
-
 ## 部署
 
 ### 方式一：一键安装（推荐）
@@ -37,6 +15,11 @@ curl -fsSL https://raw.githubusercontent.com/nsdiy-wilson/nsdiy-workbench/main/d
 ```
 
 脚本会自动从 GitHub Release 下载最新版本，校验 SHA256，安装到 `/opt/nsdiy-workbench`，并启动 systemd 服务。
+
+- 程序目录：`/opt/nsdiy-workbench/`
+- 数据目录：`/opt/nsdiy-workbench/data/`（数据库和上传文件）
+- 配置文件：`/opt/nsdiy-workbench/config.yaml`
+- 查看日志：`sudo journalctl -u nsdiy-workbench -f`
 
 ### 方式二：手动部署
 
@@ -54,35 +37,26 @@ curl -fsSL https://raw.githubusercontent.com/nsdiy-wilson/nsdiy-workbench/main/d
    /opt/nsdiy-workbench/nsdiy-workbench
    ```
 
-### 方式三：使用 systemd 管理
+如需使用 systemd 管理：
 
 ```bash
-# 复制服务文件
 sudo cp /opt/nsdiy-workbench/nsdiy-workbench.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now nsdiy-workbench
 
 # 查看状态
 sudo systemctl status nsdiy-workbench
-sudo journalctl -u nsdiy-workbench -f
 ```
 
-## 开发者：打包发布
+## 日志
 
 ```bash
-# 1. 构建前端
-cd web && npm run build && cd ..
-cd admin && npm run build && cd ..
+# 实时查看日志
+sudo journalctl -u nsdiy-workbench -f
 
-# 2. 拷贝前端产物
-rm -rf server/packfile/web_dist server/packfile/admin_dist
-cp -r web/dist server/packfile/web_dist
-cp -r admin/dist server/packfile/admin_dist
+# 查看最近 100 行日志
+sudo journalctl -u nsdiy-workbench -n 100
 
-# 3. 打包（Linux 二进制 + config.yaml + service）
-./deploy/local_package.ps1
-
-# 4. 发布到 GitHub Release
-# - 修改 server/version/base_version.go 中的 AppVersion
-# - 上传 deploy/output/ 下的 .tar.gz 和 checksums.txt
+# 查看今天日志
+sudo journalctl -u nsdiy-workbench --since today
 ```
