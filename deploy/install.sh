@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # nsdiy-workbench 首次安装脚本（重复执行会自动拒绝，升级请手动替换二进制）
+# 包内只带配置模板；本脚本首次安装时复制为运行配置文件并注入随机密钥，
+# 之后的升级永远不触碰运行配置文件（发布包里没有与它同名的文件）。
 # 用法: sudo bash install.sh
 set -euo pipefail
 
 REPO="nsdiy-wilson/nsdiy-workbench"
 SVC="nsdiy-workbench"
 DIR="/opt/nsdiy-workbench"
-CFG="$DIR/config.yaml"
+CFG="$DIR/.env"
 
 info()  { echo "[INFO] $*"; }
 error() { echo "[ERROR] $*" >&2; exit 1; }
@@ -26,14 +28,14 @@ trap 'rm -rf "$TMP"' EXIT
 
 # 最新版本
 info "查询最新版本..."
-RESP=$(wget -qO- --timeout=15 "https://api.github.com/repos/$REPO/releases/latest" || true)
+RESP=$(wget -O- --timeout=15 "https://api.github.com/repos/$REPO/releases/latest" || true)
 TAG=$(echo "$RESP" | grep -o '"tag_name": *"[^"]*"' | head -1 | cut -d'"' -f4)
 [[ -n "$TAG" ]] || error "获取最新版本失败"
 BASE="https://github.com/$REPO/releases/download/$TAG"
 
 # 先取校验清单：文件名带 _build<日期> 后缀，本地拼不出来，一律以清单为准
 info "下载校验清单..."
-wget -q --timeout=10 -O "$TMP/checksums.raw" "$BASE/checksums.txt" || error "checksums.txt 下载失败"
+wget --timeout=10 -O "$TMP/checksums.raw" "$BASE/checksums.txt" || error "checksums.txt 下载失败"
 # Windows 侧打包可能写入 CRLF，统一清理后再解析
 tr -d '\r' < "$TMP/checksums.raw" > "$TMP/checksums.txt"
 FILE=$(grep -m1 -o '[^ ]*linux-amd64[^ ]*\.tar\.gz' "$TMP/checksums.txt")
@@ -41,7 +43,7 @@ FILE=$(grep -m1 -o '[^ ]*linux-amd64[^ ]*\.tar\.gz' "$TMP/checksums.txt")
 
 # 下载
 info "下载 $TAG ($FILE) ..."
-wget -q --show-progress --timeout=60 -O "$TMP/pkg.tar.gz" "$BASE/$FILE" || error "下载失败"
+wget --show-progress --timeout=60 -O "$TMP/pkg.tar.gz" "$BASE/$FILE" || error "下载失败"
 
 # SHA256 校验（只保留十六进制字符，避免 BOM 干扰比对）
 EXPECT=$(awk -v f="$FILE" '$2==f {print $1; exit}' "$TMP/checksums.txt" | tr -cd '0-9a-fA-F')
@@ -49,19 +51,24 @@ EXPECT=$(awk -v f="$FILE" '$2==f {print $1; exit}' "$TMP/checksums.txt" | tr -cd
 [[ "$EXPECT" == "$(sha256sum "$TMP/pkg.tar.gz" | awk '{print $1}')" ]] || error "SHA256 校验失败"
 info "校验通过"
 
-# 解压（已有 config.yaml 原样保留，避免覆盖 JWT 密钥）
+# 解压（发布包内只有二进制，不含运行配置文件本名，
+# 无论怎么解压都不会覆盖部署机已生效的配置——升级路径同享此保障）
 mkdir -p "$DIR"
-if [[ -f "$CFG" ]]; then
-    cp "$CFG" "$TMP/config.bak"
-fi
 tar -xzf "$TMP/pkg.tar.gz" -C "$DIR"
-if [[ -f "$TMP/config.bak" ]]; then
-    mv -f "$TMP/config.bak" "$CFG"
-fi
 chmod +x "$DIR/nsdiy-workbench"
 
-# 首次安装生成 JWT 密钥
-if [[ -f "$CFG" ]] && grep -q 'REPLACE_ME_WITH_RANDOM_KEY' "$CFG"; then
+# 从 GitHub 仓库下载配置模板与 systemd 单元文件（发布包内不含这两个文件）
+RAW="https://raw.githubusercontent.com/$REPO/master/deploy"
+info "下载配置模板与 service 文件..."
+wget --timeout=15 -O "$DIR/.env.example" "$RAW/.env.example" || error ".env.example 下载失败"
+wget --timeout=15 -O "$DIR/$SVC.service" "$RAW/$SVC.service" || error "$SVC.service 下载失败"
+
+# 首次安装：从模板生成运行配置文件并注入随机 JWT 密钥
+if [[ ! -f "$CFG" ]]; then
+    cp "$DIR/.env.example" "$CFG"
+    info "已从模板生成运行配置文件"
+fi
+if grep -q 'REPLACE_ME_WITH_RANDOM_KEY' "$CFG"; then
     sed -i "s|REPLACE_ME_WITH_RANDOM_KEY|$(head -c 32 /dev/urandom | base64 | tr -d '\n')|" "$CFG"
     info "已生成 JWT 签名密钥"
 fi
